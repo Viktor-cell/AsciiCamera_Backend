@@ -1,28 +1,28 @@
 package main
 
 import (
-	_ "crypto/sha256"
-	_ "encoding/base64"
+	"crypto/sha512"
+	"encoding/base64"
 	"encoding/json"
-	_ "encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	_ "os"
+	"os"
 )
-
-type asciiData struct {
-	Name    string   `json:"name"`
-	Width   int      `json:"width"`
-	Height  int      `json:"height"`
-	Letters []string `json:"letters"`
-	Colors  []uint32 `json:"colors"`
-}
 
 type user struct {
 	Name         string `json:"name"`
 	PasswordHash string `json:"password_hash"`
+}
+
+type req struct {
+	Author  string   `json:"author"`
+	ArtName string   `json:"artName"`
+	Width   int      `json:"width"`
+	Heigth  int      `json:"heigth"`
+	Letters []string `json:"letters"`
+	Colors  []int64  `json:"colors"`
 }
 
 func main() {
@@ -34,6 +34,7 @@ func main() {
 	mux.HandleFunc("/debug", debug)
 	mux.HandleFunc("/login", login)
 	mux.HandleFunc("/sign_in", signIn)
+	mux.HandleFunc("/add_image", addImage)
 
 	log.Println("server at 0.0.0.0:8080")
 	handler := http.Handler(mux)
@@ -80,14 +81,50 @@ func signIn(w http.ResponseWriter, r *http.Request) {
 	bytes, err := io.ReadAll(r.Body)
 	check(err)
 
-	json.Unmarshal(bytes, &user)
+	err = json.Unmarshal(bytes, &user)
+	check(err)
 
-	if checkUserWithPassword(user) {
+	if correctPassword(user) {
 		log.Println("user ", user.Name, " entered right password")
 		w.WriteHeader(http.StatusOK)
 	} else {
 		log.Println("Bad password for ", user.Name)
 		http.Error(w, "bad name or password", http.StatusUnauthorized)
-		add_user(user)
 	}
+}
+
+func addImage(w http.ResponseWriter, r *http.Request) {
+	var req req
+	bytes, err := io.ReadAll(r.Body)
+	check(err)
+
+	err = json.Unmarshal(bytes, &req)
+	check(err)
+
+	log.Println("Creating file")
+	create_ascii_file(bytes)
+	log.Println("File created")
+}
+
+func create_ascii_file(bytes []byte) {
+	out := hash512(bytes)
+	filename := fmt.Sprintf("./images/%v.json", base64.URLEncoding.EncodeToString(out))
+
+	file, err := os.Create(filename)
+	check(err)
+	defer file.Close()
+
+	_, err = file.Write(bytes)
+	check(err)
+
+	fmt.Println(filename)
+}
+
+func hash512(bytes []byte) []byte {
+	sha := sha512.New()
+	_, err := sha.Write(bytes)
+	check(err)
+
+	out := sha.Sum(nil)
+	return out
 }

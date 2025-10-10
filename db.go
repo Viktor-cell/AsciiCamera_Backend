@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -17,7 +16,7 @@ func create_users_db() {
 	check(err)
 }
 
-func checkUserWithPassword(user user) bool {
+func correctPassword(user user) bool {
 	db, err := sql.Open("sqlite3", DB_NAME)
 	check(err)
 	defer db.Close()
