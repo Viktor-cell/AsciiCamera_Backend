@@ -2,64 +2,98 @@ package main
 
 import (
 	"database/sql"
+	"log"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
 const DB_NAME = "../ascii.db"
 
-func create_users_db() {
+func createUsersDB() {
+	log.Println("[DB] Opening database for table creation")
 	db, err := sql.Open("sqlite3", DB_NAME)
-	check(err)
+	if err != nil {
+		log.Fatal("[FATAL] Failed to open DB:", err)
+	}
 	defer db.Close()
 
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, password_hash TEXT NOT NULL) ")
-	check(err)
+	log.Println("[DB] Creating users table if not exists")
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		password_hash TEXT NOT NULL
+	)`)
+	if err != nil {
+		log.Fatal("[FATAL] Failed to create users table:", err)
+	}
+	log.Println("[DB] Users table ensured")
 }
 
 func correctPassword(user user) bool {
+	log.Printf("[AUTH] Verifying password for user: '%s'", user.Name)
 	db, err := sql.Open("sqlite3", DB_NAME)
-	check(err)
+	if err != nil {
+		log.Fatal("[FATAL] Failed to open DB:", err)
+	}
 	defer db.Close()
 
 	var existingPasswordHash string
-
 	err = db.QueryRow("SELECT password_hash FROM users WHERE name = ?", user.Name).Scan(&existingPasswordHash)
 
 	if err == sql.ErrNoRows {
+		log.Printf("[AUTH] User '%s' not found", user.Name)
 		return false
 	}
 
 	if err != nil {
-		check(err)
+		log.Fatalf("[FATAL] Query error for user '%s': %v", user.Name, err)
 	}
 
-	return user.PasswordHash == existingPasswordHash
+	match := user.PasswordHash == existingPasswordHash
+	if match {
+		log.Printf("[AUTH] Password match for user '%s'", user.Name)
+	} else {
+		log.Printf("[AUTH] Password mismatch for user '%s'", user.Name)
+	}
+	return match
 }
 
-func user_exists(name string) bool {
+func userExists(name string) bool {
+	log.Printf("[DB] Checking if user '%s' exists", name)
 	db, err := sql.Open("sqlite3", DB_NAME)
-	check(err)
+	if err != nil {
+		log.Fatal("[FATAL] Failed to open DB:", err)
+	}
 	defer db.Close()
 
 	var existingName string
 	err = db.QueryRow("SELECT name FROM users WHERE name = ?", name).Scan(&existingName)
 
 	if err == sql.ErrNoRows {
+		log.Printf("[DB] User '%s' does not exist", name)
 		return false
 	}
 
 	if err != nil {
-		check(err)
+		log.Fatalf("[FATAL] Query error for user '%s': %v", name, err)
 	}
 
+	log.Printf("[DB] User '%s' exists", name)
 	return true
 }
 
-func add_user(user user) {
+func addUser(user user) {
+	log.Printf("[DB] Adding user '%s'", user.Name)
 	db, err := sql.Open("sqlite3", DB_NAME)
-	check(err)
+	if err != nil {
+		log.Fatal("[FATAL] Failed to open DB:", err)
+	}
 	defer db.Close()
 
 	_, err = db.Exec("INSERT INTO users (name, password_hash) VALUES (?, ?)", user.Name, user.PasswordHash)
-	check(err)
+	if err != nil {
+		log.Fatalf("[FATAL] Failed to insert user '%s': %v", user.Name, err)
+	}
+
+	log.Printf("[DB] User '%s' added successfully", user.Name)
 }

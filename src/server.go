@@ -22,30 +22,26 @@ type req struct {
 	Width   int      `json:"width"`
 	Heigth  int      `json:"heigth"`
 	Letters []string `json:"letters"`
-	Colors  []int32 `json:"colors"`
+	Colors  []int32  `json:"colors"`
 }
 
 func main() {
 	mux := http.NewServeMux()
 
-	create_users_db()
+	createUsersDB()
 
 	mux.HandleFunc("/", root)
 	mux.HandleFunc("/debug", debug)
-	mux.HandleFunc("/login", login)
-	mux.HandleFunc("/sign_in", signIn)
+	mux.HandleFunc("/log_in", logIn)
+	mux.HandleFunc("/sign_up", signUp)
 	mux.HandleFunc("/add_image", addImage)
 
-	log.Println("server at 0.0.0.0:8080")
 	handler := http.Handler(mux)
 
+	log.Println("Server starting on http://0.0.0.0:8080")
 	err := http.ListenAndServe("0.0.0.0:8080", handler)
-	check(err)
-}
-
-func check(err error) {
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("[ERROR] Failed to create server: %v", err)
 	}
 }
 
@@ -55,74 +51,111 @@ func root(w http.ResponseWriter, r *http.Request) {
 
 func debug(w http.ResponseWriter, r *http.Request) {
 	bytes, err := io.ReadAll(r.Body)
-	check(err)
-	fmt.Println(string(bytes))
+	if err != nil {
+		log.Printf("[ERROR] Reading body in /debug: %v", err)
+		http.Error(w, "Failed to read body", http.StatusBadRequest)
+		return
+	}
+	log.Println("[DEBUG]", string(bytes))
+	fmt.Fprintln(w, "Debug logged")
 }
 
-func login(w http.ResponseWriter, r *http.Request) {
+func logIn(w http.ResponseWriter, r *http.Request) {
 	var user user
 	bytes, err := io.ReadAll(r.Body)
-	check(err)
+	if err != nil {
+		log.Printf("[ERROR] Reading body in /sign_in: %v", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
 
-	json.Unmarshal(bytes, &user)
+	if err := json.Unmarshal(bytes, &user); err != nil {
+		log.Printf("[ERROR] Unmarshal in /sign_in: %v", err)
+		http.Error(w, "Bad JSON", http.StatusBadRequest)
+		return
+	}
 
-	if user_exists(user.Name) {
-		log.Println("user ", user.Name, " exists")
-		http.Error(w, "user exists", http.StatusConflict)
-	} else {
-		log.Println("creating ", user.Name)
+	if correctPassword(user) {
+		log.Printf("[LOGIN] User '%s' authenticated successfully", user.Name)
 		w.WriteHeader(http.StatusOK)
-		add_user(user)
+	} else {
+		log.Printf("[LOGIN] Bad password attempt for user '%s'", user.Name)
+		http.Error(w, "bad name or password", http.StatusUnauthorized)
 	}
 }
 
-func signIn(w http.ResponseWriter, r *http.Request) {
+func signUp(w http.ResponseWriter, r *http.Request) {
 	var user user
 	bytes, err := io.ReadAll(r.Body)
-	check(err)
+	if err != nil {
+		log.Printf("[ERROR] Reading body in /login: %v", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
 
-	err = json.Unmarshal(bytes, &user)
-	check(err)
+	if err := json.Unmarshal(bytes, &user); err != nil {
+		log.Printf("[ERROR] Unmarshal in /login: %v", err)
+		http.Error(w, "Bad JSON", http.StatusBadRequest)
+		return
+	}
 
-	if correctPassword(user) {
-		log.Println("user ", user.Name, " entered right password")
-		w.WriteHeader(http.StatusOK)
+	if userExists(user.Name) {
+		log.Printf("[SIGNUP] User '%s' already exists", user.Name)
+		http.Error(w, "user exists", http.StatusConflict)
 	} else {
-		log.Println("Bad password for ", user.Name)
-		http.Error(w, "bad name or password", http.StatusUnauthorized)
+		log.Printf("[SIGNUP] Creating user '%s'", user.Name)
+		addUser(user)
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
 func addImage(w http.ResponseWriter, r *http.Request) {
 	var req req
 	bytes, err := io.ReadAll(r.Body)
-	check(err)
+	if err != nil {
+		log.Printf("[ERROR] Reading body in /add_image: %v", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
 
-	err = json.Unmarshal(bytes, &req)
-	check(err)
+	if err := json.Unmarshal(bytes, &req); err != nil {
+		log.Printf("[ERROR] Unmarshal in /add_image: %v", err)
+		http.Error(w, "Bad JSON", http.StatusBadRequest)
+		return
+	}
 
-	log.Println("Creating file")
-	create_ascii_file(bytes)
-	log.Println("File created")
+	log.Printf("[IMAGE] Adding image: %s by %s", req.ArtName, req.Author)
+	createAsciiFile(bytes)
+	log.Println("[IMAGE] File created successfully")
+	w.WriteHeader(http.StatusCreated)
 }
 
-func create_ascii_file(bytes []byte) {
+func createAsciiFile(bytes []byte) {
+	log.Println("[FILE] Generating filename from hash")
 	filenameRaw := hash512(bytes)
 	filename := fmt.Sprintf("../images/%v.json", base64.URLEncoding.EncodeToString(filenameRaw))
+	log.Printf("[FILE] Creating file: %s", filename)
 
 	file, err := os.Create(filename)
-	check(err)
+	if err != nil {
+		log.Printf("[ERROR] Creating file: %v", err)
+		return
+	}
 	defer file.Close()
 
 	_, err = file.Write(bytes)
-	check(err)
+	if err != nil {
+		log.Printf("[ERROR] Writing to file: %v", err)
+	} else {
+		log.Printf("[FILE] Write successful")
+	}
 }
 
 func hash512(bytes []byte) []byte {
 	sha := sha512.New()
 	_, err := sha.Write(bytes)
-	check(err)
-
-	out := sha.Sum(nil)
-	return out
+	if err != nil {
+		log.Printf("[ERROR] Writing to SHA512: %v", err)
+	}
+	return sha.Sum(nil)
 }
