@@ -26,9 +26,9 @@ type req struct {
 }
 
 func main() {
-	mux := http.NewServeMux()
-
 	createUsersDB()
+	createArtBD()
+	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", root)
 	mux.HandleFunc("/debug", debug)
@@ -99,12 +99,12 @@ func signUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if userExists(user.Name) {
+	if userExistsDB(user.Name) {
 		log.Printf("[SIGNUP] User '%s' already exists", user.Name)
 		http.Error(w, "user exists", http.StatusConflict)
 	} else {
 		log.Printf("[SIGNUP] Creating user '%s'", user.Name)
-		addUser(user)
+		addUserDB(user)
 		w.WriteHeader(http.StatusOK)
 	}
 }
@@ -125,15 +125,21 @@ func addImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[IMAGE] Adding image: %s by %s", req.ArtName, req.Author)
-	createAsciiFile(bytes)
+	filename := generateASCIIFilePath(bytes)
+	createASCIIFile(filename, bytes)
 	log.Println("[IMAGE] File created successfully")
+	addImageDB(req.Author, req.ArtName, filename)
 	w.WriteHeader(http.StatusCreated)
 }
 
-func createAsciiFile(bytes []byte) {
+func generateASCIIFilePath(bytes []byte) string {
 	log.Println("[FILE] Generating filename from hash")
 	filenameRaw := hash512(bytes)
 	filename := fmt.Sprintf("../images/%v.json", base64.URLEncoding.EncodeToString(filenameRaw))
+	return filename
+}
+
+func createASCIIFile(filename string, bytes []byte) {
 	log.Printf("[FILE] Creating file: %s", filename)
 
 	file, err := os.Create(filename)
