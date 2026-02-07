@@ -23,10 +23,10 @@ var db *gorm.DB
 // -------------------- Models --------------------
 
 type User struct {
-	UserID   uint   `gorm:"primaryKey;autoIncrement" json:"user_id"`
-	Name     string `gorm:"not null;uniqueIndex" json:"name"`
-	Password string `gorm:"not null" json:"password"`
-	Arts     []Art  `gorm:"foreignKey:Author" json:"-"`
+	UserID       uint   `gorm:"primaryKey;autoIncrement" json:"user_id"`
+	Name         string `gorm:"not null;uniqueIndex" json:"name"`
+	PasswordHash string `gorm:"not null;column:password_hash" json:"password"`
+	Arts         []Art  `gorm:"foreignKey:Author" json:"-"`
 }
 
 type Art struct {
@@ -118,7 +118,7 @@ func correctPassword(u User) bool {
 		log.Printf("[AUTH] User '%s' not found", u.Name)
 		return false
 	}
-	match := user.Password == u.Password
+	match := user.PasswordHash == u.PasswordHash
 	if match {
 		log.Printf("[AUTH] Password match for user '%s'", u.Name)
 	} else {
